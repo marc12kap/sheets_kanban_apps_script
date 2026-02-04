@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanban Board</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { height: 100%; overflow: hidden; }
+    body { height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; display: flex; flex-direction: column; }
+    
+    /* Header */
+    .header { background: #2c3e50; color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; flex-shrink: 0; }
+    .header h1 { font-size: 1.5rem; font-weight: 600; }
+    .header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; }
+    .btn-primary { background: #27ae60; color: #fff; }
+    .btn-primary:hover { background: #219a52; }
+    .btn-secondary { background: rgba(255,255,255,0.2); color: #fff; }
+    .btn-secondary:hover { background: rgba(255,255,255,0.3); }
+    
+    /* Filters */
+    .filters { background: #fff; padding: 12px 24px; border-bottom: 1px solid #e1e8ed; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex-shrink: 0; }
+    .filter-group { display: flex; align-items: center; gap: 6px; }
+    .filter-group label { font-size: 13px; color: #5f6368; font-weight: 500; }
+    .filter-group select { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; background: #fff; }
+    .search-group { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 200px; }
+    .search-group input { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; background: #fff; flex: 1; }
+    
+    /* Board - horizontal scroll */
+    .board-wrapper { flex: 1 1 0; min-height: 0; overflow-x: auto; overflow-y: hidden; position: relative; }
+    .board { display: inline-flex; flex-flow: row nowrap; gap: 16px; padding: 20px; height: 100%; min-width: 100%; }
+    
+    /* Columns */
+    .column { background: #ebecf0; border-radius: 8px; width: 280px; min-width: 280px; max-width: 280px; flex: 0 0 280px; display: flex; flex-direction: column; height: calc(100% - 40px); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden; }
+    .column.collapsed { width: 56px; min-width: 56px; max-width: 56px; flex: 0 0 56px; }
+    .column.collapsed .column-tasks { display: none; }
+    .column.collapsed .column-header { flex-direction: column; padding: 16px 8px; height: 100%; justify-content: flex-start; align-items: center; gap: 16px; border-bottom: none; border-left: 3px solid; }
+    .column.collapsed .column-title { flex-direction: column; gap: 12px; }
+    .column.collapsed .column-title-text { writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); font-size: 13px; letter-spacing: 0.5px; }
+    .column.collapsed .column-count { margin: 0; }
+    .column.collapsed .collapse-btn { transform: rotate(180deg); margin-top: auto; padding-bottom: 8px; }
+    
+    .column-header { padding: 12px 16px; font-weight: 600; font-size: 14px; color: #172b4d; display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid; flex-shrink: 0; cursor: pointer; user-select: none; transition: background 0.2s; }
+    .column-header:hover { background: rgba(0,0,0,0.05); }
+    .column-title { display: flex; align-items: center; gap: 8px; transition: all 0.3s; }
+    .column-title-text { white-space: nowrap; }
+    .column-count { background: rgba(0,0,0,0.1); padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .collapse-btn { background: none; border: none; cursor: pointer; font-size: 16px; color: #666; padding: 4px; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; }
+    .collapse-btn:hover { background: rgba(0,0,0,0.08); }
+    
+    .column-tasks { padding: 8px; flex: 1; overflow-y: auto; min-height: 50px; }
+    .column-tasks.drag-over { background: #d4d9e0; }
+    
+    /* Drop indicator */
+    .drop-indicator { height: 3px; background: #3498db; border-radius: 2px; margin: 4px 0; transition: opacity 0.15s; }
+    
+    /* Cards */
+    .card { background: #fff; border-radius: 6px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); cursor: grab; transition: box-shadow 0.2s, transform 0.15s, opacity 0.15s; }
+    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .card.dragging { opacity: 0.4; transform: scale(1.02) rotate(2deg); box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
+    .card-title { font-weight: 500; font-size: 14px; color: #172b4d; margin-bottom: 8px; word-break: break-word; }
+    .card-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; color: #fff; }
+    .card-meta { font-size: 12px; color: #5f6368; display: flex; flex-wrap: wrap; gap: 8px; overflow: hidden; }
+    .card-meta span { display: flex; align-items: center; gap: 4px; max-width: 100%; overflow: hidden; }
+    .card-link { color: #2563eb; text-decoration: none; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+    .card-link:hover { text-decoration: underline; }
+    
+    /* Link field in modal */
+    .link-display { display: flex; align-items: center; gap: 8px; padding: 10px; border: 1px solid #ddd; border-radius: 6px; background: #f9fafb; }
+    .link-display a { color: #2563eb; text-decoration: none; word-break: break-all; }
+    .link-display a:hover { text-decoration: underline; }
+    .link-display .link-icon { color: #6b7280; flex-shrink: 0; }
+    .link-input-group { display: flex; flex-direction: column; gap: 8px; }
+    .link-input-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    .link-input-group .link-url-input { font-size: 12px; color: #666; }
+    .link-toggle { font-size: 12px; color: #2563eb; cursor: pointer; margin-top: 4px; }
+    .link-toggle:hover { text-decoration: underline; }
+    
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
+    .modal-overlay.active { display: flex; }
+    .modal { background: #fff; border-radius: 12px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
+    .modal-header { padding: 16px 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+    .modal-header h2 { font-size: 18px; font-weight: 600; }
+    .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #999; }
+    .modal-body { padding: 20px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 500; color: #333; margin-bottom: 6px; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-group textarea.task-textarea { min-height: 120px; }
+    .form-group textarea.task-textarea { min-height: 120px; }
+    .modal-footer { padding: 16px 20px; border-top: 1px solid #eee; display: flex; justify-content: flex-end; gap: 8px; }
+    .btn-danger { background: #e74c3c; color: #fff; }
+    .btn-danger:hover { background: #c0392b; }
+    
+    /* Loading */
+    .loading { text-align: center; padding: 40px; color: #666; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+    .spinner { width: 40px; height: 40px; border: 3px solid #eee; border-top-color: #3498db; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    /* Empty state */
+    .empty-column { text-align: center; padding: 20px; color: #999; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1 id="boardTitle">Kanban Board</h1>
+    <div class="header-actions">
+      <button class="btn btn-secondary" onclick="refresh()">↻ Refresh</button>
+      <button class="btn btn-primary" onclick="openAddModal()">+ Add Task</button>
+    </div>
+  </div>
+  
+  <div class="filters" id="filtersContainer"></div>
+  
+  <div class="board-wrapper">
+    <div class="board" id="board">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Loading tasks...</p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Add/Edit Modal -->
+  <div class="modal-overlay" id="taskModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalTitle">Add Task</h2>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-danger" id="deleteBtn" onclick="deleteCurrentTask()" style="display:none;">Delete</button>
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveTask()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let schema = [];
+    let config = {};
+    let tasks = [];
+    let headers = [];
+    let filters = {};
+    let searchQuery = '';
+    let editingTask = null;
+    let collapsedColumns = new Set();
+    
+    // Initialize
+    async function init() {
+      try {
+        const data = await runScript('getInitialData');
+        
+        schema = data.schema;
+        config = data.config;
+        headers = data.tasks.headers;
+        tasks = data.tasks.tasks;
+        
+        // Set the header title to the spreadsheet name
+        document.getElementById('boardTitle').textContent = data.title;
+        
+        // Load collapsed state from localStorage
+        try {
+          const saved = localStorage.getItem('kanban-collapsed');
+          if (saved) collapsedColumns = new Set(JSON.parse(saved));
+        } catch(e) {}
+        
+        renderFilters();
+        renderBoard();
+      } catch (err) {
+        document.getElementById('board').innerHTML = `<div class="loading" style="color:#e74c3c;">Error: ${err.message}</div>`;
+      }
+    }
+    
+    function runScript(fn, ...args) {
+      return new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          [fn](...args);
+      });
+    }
+    
+    function renderFilters() {
+      const container = document.getElementById('filtersContainer');
+      const filterableFields = schema.filter(f => f.hasOptions && !f.isStatus);
+      
+      // Always show filters container if there are filterable fields or search
+      let html = '';
+      
+      // Add search input first
+      html += `
+        <div class="search-group">
+          <label>Search:</label>
+          <input type="text" 
+                 id="searchInput" 
+                 placeholder="Search all fields..." 
+                 value="${escapeHtml(searchQuery)}"
+                 oninput="setSearchQuery(this.value)">
+        </div>
+      `;
+      
+      // Add filter dropdowns
+      html += filterableFields.map(field => `
+        <div class="filter-group">
+          <label>${field.name}:</label>
+          <select onchange="setFilter('${field.name}', this.value)">
+            <option value="">All</option>
+            ${field.options.map(opt => `<option value="${opt.value}">${opt.value}</option>`).join('')}
+          </select>
+        </div>
+      `).join('');
+      
+      container.innerHTML = html;
+      
+      // Restore filter values
+      filterableFields.forEach(field => {
+        const select = container.querySelector(`select[onchange*="${field.name}"]`);
+        if (select && filters[field.name]) {
+          select.value = filters[field.name];
+        }
+      });
+    }
+    
+    function setFilter(field, value) {
+      if (value) filters[field] = value;
+      else delete filters[field];
+      renderBoard();
+    }
+    
+    function setSearchQuery(query) {
+      searchQuery = query.trim();
+      renderBoard();
+    }
+    
+    function taskMatchesSearch(task, query) {
+      if (!query) return true;
+      
+      const lowerQuery = query.toLowerCase();
+      
+      // Search through all task fields
+      for (const [key, value] of Object.entries(task)) {
+        // Skip internal fields
+        if (key === '_id') continue;
+        
+        // Handle link objects - search both text and url
+        if (isLinkObject(value)) {
+          if (value.text.toLowerCase().includes(lowerQuery) || 
+              value.url.toLowerCase().includes(lowerQuery)) {
+            return true;
+          }
+          continue;
+        }
+        
+        // Convert value to string and search
+        const strValue = String(value || '').toLowerCase();
+        if (strValue.includes(lowerQuery)) {
+          return true;
+        }
+      }
+      
+      return false;
+    }
+    
+    function getFilteredTasks() {
+      return tasks.filter(task => {
+        // Apply field filters (AND logic)
+        const matchesFilters = Object.entries(filters).every(([field, value]) => task[field] === value);
+        
+        // Apply search query
+        const matchesSearch = taskMatchesSearch(task, searchQuery);
+        
+        return matchesFilters && matchesSearch;
+      });
+    }
+    
+    function getStatuses() {
+      return config['Status'] || [
+        { value: 'Not Started', color: '#95a5a6' },
+        { value: 'In Progress', color: '#3498db' },
+        { value: 'Complete', color: '#27ae60' }
+      ];
+    }
+    
+    function toggleColumn(status) {
+      if (collapsedColumns.has(status)) {
+        collapsedColumns.delete(status);
+      } else {
+        collapsedColumns.add(status);
+      }
+      saveCollapsedState();
+      renderBoard();
+    }
+    
+    function expandAll() {
+      collapsedColumns.clear();
+      saveCollapsedState();
+      renderBoard();
+    }
+    
+    function collapseAll() {
+      getStatuses().forEach(s => collapsedColumns.add(s.value));
+      saveCollapsedState();
+      renderBoard();
+    }
+    
+    function saveCollapsedState() {
+      try {
+        localStorage.setItem('kanban-collapsed', JSON.stringify([...collapsedColumns]));
+      } catch(e) {}
+    }
+    
+    function renderBoard() {
+      const board = document.getElementById('board');
+      const statuses = getStatuses();
+      const filtered = getFilteredTasks();
+      
+      board.innerHTML = statuses.map(status => {
+        // Filter and sort by Order for correct display
+        const statusTasks = filtered
+          .filter(t => t['Status'] === status.value)
+          .sort((a, b) => {
+            const orderA = Number(a['Order'] || a._row || 0);
+            const orderB = Number(b['Order'] || b._row || 0);
+            return orderA - orderB;
+          });
+        const isCollapsed = collapsedColumns.has(status.value);
+        const borderColor = status.color || '#95a5a6';
+        
+        return `
+          <div class="column ${isCollapsed ? 'collapsed' : ''}">
+            <div class="column-header" style="border-color: ${borderColor}; ${isCollapsed ? 'border-left-color: ' + borderColor : ''}" onclick="toggleColumn('${status.value}')">
+              <span class="column-title">
+                <span class="column-title-text">${status.value}</span>
+                <span class="column-count">${statusTasks.length}</span>
+              </span>
+              <button class="collapse-btn" title="${isCollapsed ? 'Expand' : 'Collapse'}">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M10.354 3.354a.5.5 0 0 0-.708-.708L5.293 7l4.353 4.354a.5.5 0 0 0 .708-.708L6.707 7l3.647-3.646z"/>
+                </svg>
+              </button>
+            </div>
+            <div class="column-tasks" 
+                 data-status="${status.value}"
+                 ondragover="handleDragOver(event)"
+                 ondragleave="handleDragLeave(event)"
+                 ondrop="handleDrop(event)">
+              ${statusTasks.length === 0 
+                ? '<div class="empty-column">No tasks</div>'
+                : statusTasks.map(t => renderCard(t)).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+    
+    function renderCard(task) {
+      // Always use the "Task" column for the card title (skip Task ID)
+      const titleField = headers.find(h => h.toLowerCase() === 'task') || headers.find(h => h.toLowerCase() !== 'status' && h.toLowerCase() !== 'task id' && task[h]) || headers[0];
+      const title = task[titleField] || 'Untitled';
+      
+      const badgeFields = schema.filter(f => f.hasOptions && !f.isStatus && task[f.name]);
+      const badges = badgeFields.map(field => {
+        const opt = field.options.find(o => o.value === task[field.name]);
+        const color = opt?.color || '#7f8c8d';
+        return `<span class="badge" style="background:${color}">${task[field.name]}</span>`;
+      }).join('');
+      
+      // Exclude Task ID and Order from meta fields (Order is system-managed)
+      const metaFields = schema.filter(f => !f.hasOptions && !f.isStatus && f.name !== titleField && f.name.toLowerCase() !== 'task id' && f.name.toLowerCase() !== 'order' && task[f.name]);
+      const meta = metaFields.slice(0, 3).map(f => {
+        let val = task[f.name];
+        if (f.name.toLowerCase().includes('date') && val) val = formatDate(val);
+        // Handle hyperlink objects
+        if (isLinkObject(val)) {
+          return `<span>${f.name}: <a href="${escapeHtml(val.url)}" class="card-link" target="_blank" rel="noopener" onclick="event.stopPropagation();">${escapeHtml(val.text)}</a></span>`;
+        }
+        return `<span>${f.name}: ${escapeHtml(String(val))}</span>`;
+      }).join('');
+      
+      return `
+        <div class="card" 
+             draggable="true"
+             data-id="${task._id}"
+             ondragstart="handleDragStart(event)"
+             ondragend="handleDragEnd(event)"
+             onclick="openEditModal('${task._id}')">
+          <div class="card-title">${escapeHtml(title)}</div>
+          ${badges ? `<div class="card-badges">${badges}</div>` : ''}
+          ${meta ? `<div class="card-meta">${meta}</div>` : ''}
+        </div>
+      `;
+    }
+    
+    // Drag and Drop
+    let draggedTaskId = null;
+    
+    function handleDragStart(e) {
+      e.stopPropagation();
+      const card = e.target.closest('.card');
+      if (!card) return;
+      
+      card.classList.add('dragging');
+      draggedTaskId = card.dataset.id;
+      e.dataTransfer.setData('text/plain', draggedTaskId);
+      e.dataTransfer.effectAllowed = 'move';
+    }
+    
+    function handleDragEnd(e) {
+      const card = e.target.closest('.card');
+      if (card) card.classList.remove('dragging');
+      draggedTaskId = null;
+      removeAllDropIndicators();
+    }
+    
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      
+      const container = e.currentTarget;
+      container.classList.add('drag-over');
+      
+      // Show drop indicator
+      const afterElement = getDragAfterElement(container, e.clientY);
+      showDropIndicator(container, afterElement);
+    }
+    
+    function handleDragLeave(e) {
+      // Only remove if actually leaving the container (not entering a child)
+      if (!e.currentTarget.contains(e.relatedTarget)) {
+        e.currentTarget.classList.remove('drag-over');
+        removeDropIndicator(e.currentTarget);
+      }
+    }
+    
+    function getDragAfterElement(container, y) {
+      const draggableElements = [...container.querySelectorAll('.card:not(.dragging)')];
+      
+      return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child };
+        } else {
+          return closest;
+        }
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+    
+    function showDropIndicator(container, beforeElement) {
+      // Remove existing indicator in this container
+      removeDropIndicator(container);
+      
+      // Create new indicator
+      const indicator = document.createElement('div');
+      indicator.className = 'drop-indicator';
+      
+      if (beforeElement) {
+        beforeElement.parentNode.insertBefore(indicator, beforeElement);
+      } else {
+        container.appendChild(indicator);
+      }
+    }
+    
+    function removeDropIndicator(container) {
+      const existing = container.querySelector('.drop-indicator');
+      if (existing) existing.remove();
+    }
+    
+    function removeAllDropIndicators() {
+      document.querySelectorAll('.drop-indicator').forEach(el => el.remove());
+      document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    }
+    
+    async function handleDrop(e) {
+      e.preventDefault();
+      const container = e.currentTarget;
+      container.classList.remove('drag-over');
+      removeDropIndicator(container);
+      
+      const taskId = e.dataTransfer.getData('text/plain');
+      if (!taskId) return;
+      
+      const newStatus = container.dataset.status;
+      const task = tasks.find(t => t._id === taskId);
+      if (!task) return;
+      
+      // Find the card we're dropping before (if any)
+      const afterElement = getDragAfterElement(container, e.clientY);
+      const beforeTaskId = afterElement ? afterElement.dataset.id : null;
+      
+      // Don't insert before ourselves
+      const insertBeforeId = (beforeTaskId && beforeTaskId !== taskId) ? beforeTaskId : null;
+      
+      // Optimistic update: reorder in local state immediately
+      const oldStatus = task['Status'];
+      task['Status'] = newStatus;
+      
+      // Reorder in the local tasks array for immediate visual feedback
+      reorderTaskLocally(taskId, newStatus, insertBeforeId);
+      renderBoard();
+      
+      // Save to backend (don't await - fire and forget for speed)
+      runScript('moveTaskRow', taskId, newStatus, insertBeforeId)
+        .catch(err => {
+          // Revert on error and refresh
+          console.error('Failed to save order:', err);
+          alert('Failed to save: ' + err.message);
+          refresh();
+        });
+    }
+    
+    // Reorder task in local array for instant visual feedback
+    function reorderTaskLocally(taskId, newStatus, beforeTaskId) {
+      const task = tasks.find(t => t._id === taskId);
+      if (!task) return;
+      
+      // Get tasks in the target status column (sorted by current order)
+      const statusTasks = tasks
+        .filter(t => t['Status'] === newStatus && t._id !== taskId)
+        .sort((a, b) => {
+          const orderA = Number(a['Order'] || a._row || 0);
+          const orderB = Number(b['Order'] || b._row || 0);
+          return orderA - orderB;
+        });
+      
+      // Find insert position
+      let insertIndex = statusTasks.length; // Default: end
+      if (beforeTaskId) {
+        const beforeIndex = statusTasks.findIndex(t => t._id === beforeTaskId);
+        if (beforeIndex !== -1) {
+          insertIndex = beforeIndex;
+        }
+      }
+      
+      // Insert task at the right position
+      statusTasks.splice(insertIndex, 0, task);
+      
+      // Update Order values locally
+      statusTasks.forEach((t, idx) => {
+        t['Order'] = idx + 1;
+      });
+    }
+    
+    // Modal
+    function openAddModal() {
+      editingTask = null;
+      document.getElementById('modalTitle').textContent = 'Add Task';
+      document.getElementById('deleteBtn').style.display = 'none';
+      renderModalForm({});
+      document.getElementById('taskModal').classList.add('active');
+    }
+    
+    function openEditModal(taskId) {
+      const task = tasks.find(t => t._id === taskId);
+      if (!task) return;
+      
+      editingTask = task;
+      document.getElementById('modalTitle').textContent = 'Edit Task';
+      document.getElementById('deleteBtn').style.display = 'block';
+      renderModalForm(task);
+      document.getElementById('taskModal').classList.add('active');
+    }
+    
+    function renderModalForm(task) {
+      const body = document.getElementById('modalBody');
+      // Always use the "Task" column as the primary title field
+      const titleField = headers.find(h => h.toLowerCase() === 'task') || headers.find(h => h.toLowerCase() !== 'status') || headers[0];
+      
+      // Filter out Task ID and Order fields - they're system-managed and shouldn't be editable
+      const editableFields = schema.filter(f => {
+        const name = f.name.toLowerCase();
+        return name !== 'task id' && name !== 'taskid' && name !== 'order';
+      });
+      
+      body.innerHTML = editableFields.map(field => {
+        const rawValue = task[field.name];
+        const isLink = isLinkObject(rawValue);
+        const value = isLink ? rawValue.text : (rawValue || '');
+        const linkUrl = isLink ? rawValue.url : '';
+        const isTaskField = field.name.toLowerCase() === 'task' || field.name === titleField;
+        
+        if (field.hasOptions) {
+          return `
+            <div class="form-group">
+              <label>${field.name}${field.isStatus ? ' *' : ''}</label>
+              <select name="${field.name}" ${field.isStatus ? 'required' : ''}>
+                ${!field.isStatus ? '<option value="">-- Select --</option>' : ''}
+                ${field.options.map(opt => 
+                  `<option value="${opt.value}" ${value === opt.value ? 'selected' : ''}>${opt.value}</option>`
+                ).join('')}
+              </select>
+            </div>
+          `;
+        } else if (field.name.toLowerCase().includes('date')) {
+          return `
+            <div class="form-group">
+              <label>${field.name}</label>
+              <input type="date" name="${field.name}" value="${value}">
+            </div>
+          `;
+        } else if (field.name.toLowerCase().includes('note') || field.name.toLowerCase().includes('description')) {
+          return `
+            <div class="form-group">
+              <label>${field.name}</label>
+              <textarea name="${field.name}">${escapeHtml(value)}</textarea>
+            </div>
+          `;
+        } else if (isTaskField) {
+          return `
+            <div class="form-group">
+              <label>${field.name}</label>
+              <textarea class="task-textarea" name="${field.name}">${escapeHtml(value)}</textarea>
+            </div>
+          `;
+        } else if (isLinkField(field.name)) {
+          // Link field - show clickable link if exists, with edit capability
+          const fieldId = field.name.replace(/\s+/g, '_');
+          if (isLink) {
+            return `
+              <div class="form-group" data-link-field="${field.name}">
+                <label>${field.name}</label>
+                <div class="link-display" id="link-display-${fieldId}">
+                  <span class="link-icon">🔗</span>
+                  <a href="${escapeHtml(linkUrl)}" target="_blank" rel="noopener">${escapeHtml(value)}</a>
+                </div>
+                <span class="link-toggle" onclick="toggleLinkEdit('${fieldId}', '${field.name}')">Edit link</span>
+                <div class="link-input-group" id="link-edit-${fieldId}" style="display: none;">
+                  <input type="text" name="${field.name}" placeholder="Link text (display name)" value="${escapeHtml(value)}">
+                  <input type="url" name="${field.name}_url" class="link-url-input" placeholder="URL (https://...)" value="${escapeHtml(linkUrl)}">
+                </div>
+              </div>
+            `;
+          } else {
+            // No existing link - show input fields for adding one
+            return `
+              <div class="form-group" data-link-field="${field.name}">
+                <label>${field.name}</label>
+                <div class="link-input-group">
+                  <input type="text" name="${field.name}" placeholder="Link text (display name)" value="${escapeHtml(value)}">
+                  <input type="url" name="${field.name}_url" class="link-url-input" placeholder="URL (https://...)">
+                </div>
+              </div>
+            `;
+          }
+        } else {
+          return `
+            <div class="form-group">
+              <label>${field.name}</label>
+              <input type="text" name="${field.name}" value="${escapeHtml(value)}">
+            </div>
+          `;
+        }
+      }).join('');
+    }
+    
+    function toggleLinkEdit(fieldId, fieldName) {
+      const display = document.getElementById(`link-display-${fieldId}`);
+      const edit = document.getElementById(`link-edit-${fieldId}`);
+      const toggle = display.parentElement.querySelector('.link-toggle');
+      
+      if (edit.style.display === 'none') {
+        display.style.display = 'none';
+        edit.style.display = 'flex';
+        toggle.textContent = 'Cancel edit';
+      } else {
+        display.style.display = 'flex';
+        edit.style.display = 'none';
+        toggle.textContent = 'Edit link';
+      }
+    }
+    
+    function closeModal() {
+      document.getElementById('taskModal').classList.remove('active');
+      editingTask = null;
+    }
+    
+    async function saveTask() {
+      const form = document.getElementById('modalBody');
+      const taskData = {};
+      const linkFields = {};
+      
+      schema.filter(f => {
+        const name = f.name.toLowerCase();
+        return name !== 'task id' && name !== 'taskid' && name !== 'order';
+      }).forEach(field => {
+        const input = form.querySelector(`[name="${field.name}"]`);
+        const value = input ? input.value : '';
+        
+        if (isLinkField(field.name)) {
+          const urlInput = form.querySelector(`[name="${field.name}_url"]`);
+          if (urlInput && urlInput.value) {
+            linkFields[field.name] = { text: value, url: urlInput.value };
+            // For the local task object (optimistic update), we use the object format
+            taskData[field.name] = { text: value, url: urlInput.value };
+          } else {
+            taskData[field.name] = value;
+          }
+        } else {
+          taskData[field.name] = value;
+        }
+      });
+      
+      if (!taskData['Status']) {
+        alert('Status is required');
+        return;
+      }
+      
+      const isNew = !editingTask;
+      const originalTasks = [...tasks];
+      
+      try {
+        // Clean taskData for backend: convert link objects to their text part
+        // because the backend uses linkFields for the actual Rich Text logic
+        const cleanTaskData = { ...taskData };
+        for (const key in cleanTaskData) {
+          if (isLinkObject(cleanTaskData[key])) {
+            cleanTaskData[key] = cleanTaskData[key].text;
+          }
+        }
+
+        if (isNew) {
+          // For new tasks, we refresh to get the server-generated ID
+          await runScript('addTask', cleanTaskData, linkFields);
+          closeModal();
+          refresh();
+        } else {
+          const taskId = editingTask._id; // Capture ID before closeModal() clears editingTask
+          
+          // Optimistic update for existing task
+          const taskIdx = tasks.findIndex(t => t._id === taskId);
+          if (taskIdx !== -1) {
+            tasks[taskIdx] = { ...tasks[taskIdx], ...taskData };
+            renderBoard();
+          }
+          
+          closeModal();
+          
+          await runScript('updateTask', taskId, cleanTaskData, linkFields);
+        }
+      } catch (err) {
+        tasks = originalTasks; // Revert
+        renderBoard();
+        alert('Error saving: ' + err.message);
+      }
+    }
+    
+    async function deleteCurrentTask() {
+      if (!editingTask) return;
+      if (!confirm('Delete this task?')) return;
+      
+      const originalTasks = [...tasks];
+      const taskId = editingTask._id;
+      
+      try {
+        // Optimistic delete
+        tasks = tasks.filter(t => t._id !== taskId);
+        renderBoard();
+        closeModal();
+        
+        await runScript('deleteTask', taskId);
+      } catch (err) {
+        tasks = originalTasks; // Revert
+        renderBoard();
+        alert('Error deleting: ' + err.message);
+      }
+    }
+    
+    async function refresh() {
+      const taskData = await runScript('getTasks');
+      tasks = taskData.tasks;
+      headers = taskData.headers;
+      renderBoard();
+    }
+    
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
+    }
+    
+    // Check if a value is a hyperlink object {text, url}
+    function isLinkObject(val) {
+      return val && typeof val === 'object' && val.url && val.text;
+    }
+    
+    // Get display value from a field (handles both plain values and link objects)
+    function getDisplayValue(val) {
+      if (isLinkObject(val)) return val.text;
+      return val || '';
+    }
+    
+    // Check if a field name suggests it contains links
+    function isLinkField(fieldName) {
+      const lower = fieldName.toLowerCase();
+      return lower.includes('link') || 
+             lower.includes('url') || 
+             lower.includes('doc') || 
+             lower.includes('document') ||
+             lower.includes('related') ||
+             lower.includes('attachment') ||
+             lower.includes('file') ||
+             lower.includes('resource');
+    }
+    
+    function formatDate(d) {
+      if (!d) return '';
+      // Parse yyyy-MM-dd format as local date (not UTC) to avoid timezone shift
+      const str = String(d);
+      const parts = str.split('-');
+      if (parts.length === 3) {
+        // Create date using local timezone (month is 0-indexed)
+        const date = new Date(parts[0], parts[1] - 1, parts[2]);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      }
+      // Fallback for other formats
+      const date = new Date(d);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+    
+    init();
+  </script>
+</body>
+</html>
