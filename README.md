@@ -82,7 +82,7 @@ If you want to manage team members separately with email linking:
 
 | Name | Email | Color |
 |------|-------|-------|
-| Marc Kaplan | marc@example.com | #3498db |
+| Marc Smith | marc@example.com | #3498db |
 | Jane Doe | jane@example.com | #9b59b6 |
 
 **How Owners Works:**
